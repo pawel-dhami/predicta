@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/useAuth';
+import { API_BASE } from '../lib/api';
 import { Send, Bot, User, Sparkles, RefreshCw, Zap } from 'lucide-react';
 
 const QUICK_PROMPTS = [
@@ -17,9 +18,10 @@ const QUICK_PROMPTS = [
   'What are my weakest areas?',
 ];
 
-// /api/* is rewritten by netlify.toml to /.netlify/functions/api/:splat
-// So /api/agent/chat hits the function with path /api/agent/chat ✓
-const CHAT_URL = '/api/agent/chat';
+let _msgId = 0;
+const nextId = () => ++_msgId;
+
+const CHAT_URL = `${API_BASE}/api/agent/chat`;
 
 function Message({ msg }) {
   const isUser = msg.role === 'user';
@@ -92,6 +94,7 @@ export default function AIMentorPage() {
   const { user } = useAuth();
   const [messages, setMessages] = useState([
     {
+      id: nextId(),
       role: 'assistant',
       content: `Hi! I'm your AI Placement Mentor 🤖\n\nI'm here to give you personalized guidance on your placement journey — from interview prep to application strategy.\n\n${aiAnalysis ? `I can see your profile: ${aiAnalysis.placementScore}/100 placement score, ${aiAnalysis.experienceLevel} level. Ask me anything!` : 'Complete your profile analysis in Onboarding to get personalized advice.'}\n\nWhat would you like to work on today?`
     }
@@ -110,7 +113,7 @@ export default function AIMentorPage() {
     if (!content || loading) return;
     setInput('');
 
-    const userMsg = { role: 'user', content };
+    const userMsg = { id: nextId(), role: 'user', content };
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
@@ -140,10 +143,10 @@ export default function AIMentorPage() {
       }
 
       const reply = data.reply || data.message || 'Sorry, I had trouble responding.';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: reply }]);
     } catch (err) {
       console.error('[AI Mentor] chat error:', err);
-      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${err.message || 'Connection issue — please try again.'}` }]);
+      setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content: `⚠️ ${err.message || 'Connection issue — please try again.'}` }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -152,6 +155,7 @@ export default function AIMentorPage() {
 
   const clearChat = () => {
     setMessages([{
+      id: nextId(),
       role: 'assistant',
       content: 'Chat cleared! What would you like to work on? 🤖'
     }]);
@@ -200,7 +204,7 @@ export default function AIMentorPage() {
       </div>
 
       {/* Chat window */}
-      <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: 520 }}>
+      <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 400, maxHeight: '65vh' }}>
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 10px' }}>
           <style>{`
@@ -209,8 +213,8 @@ export default function AIMentorPage() {
               40% { transform: scale(1); }
             }
           `}</style>
-          {messages.map((msg, i) => (
-            <Message key={i} msg={msg} />
+          {messages.map((msg) => (
+            <Message key={msg.id} msg={msg} />
           ))}
           {loading && <TypingIndicator />}
           <div ref={bottomRef} />

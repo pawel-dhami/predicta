@@ -394,13 +394,13 @@ export default function LandingHero() {
 
                 <motion.div {...staggerChildren} className="landing-features-grid">
                     {features.map((f, i) => (
-                        <motion.div
+                        <motion.button
                             key={f.title}
                             {...fadeUp}
                             transition={{ duration: 0.5, delay: i * 0.1 }}
                             className="landing-feature-card"
                             onClick={() => navigate(f.link)}
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: 'pointer', textAlign: 'left', border: 'none', fontFamily: 'inherit' }}
                         >
                             <div className="landing-feature-icon" style={{ background: f.gradient }}>
                                 <f.icon size={22} color="#fff" />
@@ -410,7 +410,7 @@ export default function LandingHero() {
                             <div className="landing-feature-link" style={{ color: f.color }}>
                                 {f.cta} <ChevronRight size={14} />
                             </div>
-                        </motion.div>
+                        </motion.button>
                     ))}
                 </motion.div>
             </section>

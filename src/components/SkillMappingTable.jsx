@@ -1,6 +1,6 @@
 export default function SkillMappingTable({ skills, companyRequirements }) {
   return (
-    <div>
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
       <table className="table">
         <thead>
           <tr>

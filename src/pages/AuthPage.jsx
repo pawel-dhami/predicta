@@ -67,7 +67,7 @@ export default function AuthPage() {
 
         try {
             if (mode === 'signup') {
-                const data = await signUp(email, password);
+                const data = await signUp(email, password, { role });
                 if (data?.session) {
                     // Auto-confirm enabled — go straight to dashboard
                     navigate(role === 'tpc' ? '/admin' : '/dashboard', { replace: true });
@@ -297,6 +297,7 @@ export default function AuthPage() {
                                                 placeholder={isSignup ? 'Min 6 characters' : 'Your password'}
                                                 className="auth-input auth-input-password"
                                                 autoComplete={isSignup ? 'new-password' : 'current-password'}
+                                                minLength={6}
                                             />
                                             <button type="button" onClick={() => setShowPass(!showPass)} className="auth-eye-btn">
                                                 {showPass ? <EyeOff size={15} /> : <Eye size={15} />}

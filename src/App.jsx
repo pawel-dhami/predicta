@@ -15,6 +15,7 @@ import RoadmapPage from './pages/RoadmapPage';
 import ApplicationsPage from './pages/ApplicationsPage';
 import AIMentorPage from './pages/AIMentorPage';
 import AlertsPage from './pages/AlertsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 // Scroll to top on every route change
 function ScrollToTop() {
@@ -37,6 +38,22 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return (
+    <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: 'var(--bg-root)' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div className="pulse" style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--accent-purple)', margin: '0 auto 12px' }} />
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading...</div>
+      </div>
+    </div>
+  );
+  if (!user) return <Navigate to="/login" replace />;
+  const role = user?.user_metadata?.role;
+  if (role !== 'tpc' && role !== 'admin') return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 export default function App() {
   const location = useLocation();
 
@@ -48,7 +65,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<LandingHero />} />
           <Route path="/login" element={<AuthPage />} />
-          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
 
           {/* OAuth callback — must be public, processes the token hash */}
           <Route path="/auth/callback" element={<AuthCallback />} />
@@ -62,12 +79,12 @@ export default function App() {
             <Route path="/roadmap" element={<RoadmapPage />} />
             <Route path="/ai-mentor" element={<AIMentorPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/admin/analytics" element={<AdminPanel />} />
+            {/* Admin Routes — require TPC role */}
+            <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+            <Route path="/admin/analytics" element={<AdminRoute><AdminPanel /></AdminRoute>} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AnimatePresence>
     </>

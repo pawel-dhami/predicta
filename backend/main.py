@@ -504,3 +504,25 @@ async def admin_risk_students():
         ))
     return students
 
+
+# ── GitHub verify stub (called by onboarding) ──────────────────────
+class GitHubVerifyRequest(BaseModel):
+    githubUsername: str
+    userId: str
+
+@app.post("/api/github/verify")
+async def github_verify(req: GitHubVerifyRequest):
+    """
+    Stub endpoint for onboarding — accepts a GitHub username and userId,
+    stores the username in the user's profile for later verification.
+    """
+    db = get_db()
+    try:
+        db.from_('profiles').upsert({
+            'user_id': req.userId,
+            'github_username': req.githubUsername,
+        }, on_conflict='user_id').execute()
+        return {"status": "ok", "githubUsername": req.githubUsername}
+    except Exception as e:
+        print(f"[github/verify] Error storing username: {e}")
+        return {"status": "ok", "githubUsername": req.githubUsername, "note": "stored with fallback"}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import RecommendationCard from '../components/RecommendationCard';
 import RadarChart from '../components/RadarChart';
@@ -13,8 +14,6 @@ import { alertsSeed, companyRequirements, mockStudents, recommendationSeed } fro
 import { useAgent } from '../hooks/useAgent';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/useAuth';
-
-const API_BASE = ''; // dev proxy rewrites /api → http://localhost:8000
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -67,6 +66,7 @@ function displayNameFrom(user, linkedinData) {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { aiAnalysis, verifiedSkills, linkedinData, loading: profileLoading } = useProfile();
   const { sendChatMessage, chat, fetchRecommendations, fetchAlerts } = useAgent();
 
@@ -107,6 +107,26 @@ export default function StudentDashboard() {
     if (aiAnalysis?.placementScore == null) return null;
     return Math.max(0, Math.min(99, Math.round(aiAnalysis.placementScore * 0.9)));
   }, [aiAnalysis]);
+
+  // Derive skill match rate from radar scores vs company requirements
+  const skillMatchRate = useMemo(() => {
+    if (!aiAnalysis?.skillTags || aiAnalysis.skillTags.length === 0) return null;
+    const entries = Object.entries(radarScores);
+    if (entries.length === 0) return null;
+    const avg = entries.reduce((sum, [, v]) => sum + v, 0) / entries.length;
+    return Math.round((avg / 10) * 100);
+  }, [aiAnalysis, radarScores]);
+
+  // Derive risk level from weak areas count
+  const riskLevel = useMemo(() => {
+    if (!aiAnalysis) return null;
+    const weakCount = aiAnalysis.weakAreas?.length ?? 0;
+    if (weakCount >= 3) return 'HIGH';
+    if (weakCount >= 1) return 'MEDIUM';
+    return 'LOW';
+  }, [aiAnalysis]);
+
+  const riskAccent = riskLevel === 'HIGH' ? '#dc2626' : riskLevel === 'MEDIUM' ? '#d97706' : '#059669';
 
   const complete = useMemo(
     () => Math.round((student.roadmapTasks.filter(t => t.done).length / student.roadmapTasks.length) * 100),
@@ -219,9 +239,9 @@ export default function StudentDashboard() {
           mono
           icon="🎯"
         />
-        <StatCard title="Skill Match Rate" value="64%" subtitle="Avg across 5 target companies" accent="#0891b2" icon="📊" />
-        <StatCard title="Applications" value="3 / 12" subtitle="3 Active · 2 interviews scheduled" accent="#d97706" icon="📋" />
-        <StatCard title="Risk Level" value="MEDIUM" subtitle="2 skills below threshold" accent="#dc2626" icon="⚠️" />
+        <StatCard title="Skill Match Rate" value={skillMatchRate != null ? `${skillMatchRate}%` : 'Not analyzed'} subtitle="Avg across target companies" accent="#0891b2" icon="📊" />
+        <StatCard title="Applications" value={`${student.applications.filter(a => a.status === 'active' || a.status === 'interview').length} / ${student.applications.length}`} subtitle={`${student.applications.filter(a => a.status === 'interview').length} interviews scheduled`} accent="#d97706" icon="📋" />
+        <StatCard title="Risk Level" value={riskLevel ?? 'Not analyzed'} subtitle={riskLevel ? `${aiAnalysis?.weakAreas?.length ?? 0} skills below threshold` : 'Run profile analysis'} accent={riskAccent} icon="⚠️" />
       </div>
 
       {/* ── AI Skill Tags (only when analysis exists) ─────────────── */}
@@ -304,7 +324,7 @@ export default function StudentDashboard() {
             border: '1px solid var(--border)', fontSize: 12, marginTop: 8,
           }}>
             <strong style={{ color: '#dc2626' }}>Weakest:</strong> {weakestSkill} ·{' '}
-            <a href="#">Start learning →</a>
+            <a href="/skills" style={{ color: 'var(--accent-purple)' }}>Start learning →</a>
           </div>
         </div>
       </div>
@@ -333,8 +353,8 @@ export default function StudentDashboard() {
             {student.roadmapTasks.map(task => <RoadmapTask key={task.id} task={task} />)}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <button className="btn btn-sm">+ Add task</button>
-            <button className="btn btn-sm btn-accent">🤖 AI Generate Next</button>
+            <button className="btn btn-sm" onClick={() => navigate('/roadmap')}>+ Add task</button>
+            <button className="btn btn-sm btn-accent" onClick={() => { window.dispatchEvent(new CustomEvent('run-ai-analysis')); navigate('/roadmap'); }}>🤖 AI Generate Next</button>
           </div>
         </div>
 
@@ -387,7 +407,7 @@ export default function StudentDashboard() {
               🤖 <strong>AI Assessment:</strong> {selected.reasoning}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-accent" onClick={() => setSelected(null)}>Confirm Application</button>
+              <button className="btn btn-accent" onClick={() => { navigate('/applications'); setSelected(null); }}>Confirm Application</button>
               <button className="btn" onClick={() => setSelected(null)}>Close</button>
             </div>
           </div>
