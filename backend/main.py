@@ -1,10 +1,12 @@
 """
-PlaceIQ API — FastAPI backend
+PlaceIQ API — Consolidated FastAPI backend
 All data is live from Supabase. AI chat powered by Groq Llama 3.1.
+All endpoints from api.mjs + linkedin-analyze-background.mjs are now here.
 """
 import os
 import json
 from typing import List, Optional, Any
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +16,13 @@ from agent.models import (
     AgentRunRequest, ChatRequest, ChatResponse,
     Recommendation, RiskStudent, Application, ApplicationCreate,
     SkillMapping, NextAction, Alert, JourneyStage,
-    StudentAnalytics, BatchMetrics,
+    StudentAnalytics, BatchMetrics, GitHubVerifyRequest,
 )
+from services import (
+    call_groq, chat_fallback, generate_recommendations,
+    analyze_linkedin_with_groq, run_linkedin_analysis_background,
+)
+from routes_extra import router as extra_router
 
 load_dotenv()
 
@@ -44,6 +51,9 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+# Mount ported endpoints from api.mjs
+app.include_router(extra_router)
 
 
 def get_db() -> Client:
@@ -85,19 +95,31 @@ async def build_system_prompt(user_id: str, db: Client) -> str:
         li = data.get('linkedin_data') or {}
         name = li.get('fullName') or li.get('firstName') or 'Student'
         headline = f"\n- Headline: {li['headline']}" if li.get('headline') else ''
-        company = f"\n- Company: {li['currentCompany']}" if li.get('currentCompany') else ''
+        company = f"\n- Current/Latest Company: {li['currentCompany']}" if li.get('currentCompany') else ''
         location = f"\n- Location: {li['location']}" if li.get('location') else ''
-        exp_level = f"\n- Experience: {ai['experienceLevel']}" if ai.get('experienceLevel') else ''
+        exp_level = f"\n- Experience Level: {ai['experienceLevel']}" if ai.get('experienceLevel') else ''
         score = f"\n- Placement Score: {ai['placementScore']}/100" if ai.get('placementScore') is not None else ''
         summary = f"\nSTRENGTH SUMMARY:\n{ai['strengthSummary']}" if ai.get('strengthSummary') else ''
-        skills = '\nSKILLS:\n' + '\n'.join(f"- {s}" for s in ai.get('skillTags', [])) if ai.get('skillTags') else ''
+        skills = '\nSKILLS IDENTIFIED:\n' + '\n'.join(f"- {s}" for s in ai.get('skillTags', [])) if ai.get('skillTags') else ''
         weak = '\nWEAK AREAS:\n' + '\n'.join(f"- {w}" for w in ai.get('weakAreas', [])) if ai.get('weakAreas') else ''
         roles = '\nBEST-FIT ROLES:\n' + '\n'.join(f"- {r}" for r in ai.get('topRoles', [])) if ai.get('topRoles') else ''
 
-        return f"""You are PlaceIQ AI Mentor — personalized for {name}.
+        # Include recent experience and education from LinkedIn data
+        exp_lines = '\n'.join(
+            f"- {e.get('role','')} at {e.get('company','')} ({e.get('duration','')})"
+            for e in (li.get('experiences') or [])[:2]
+        )
+        experiences = f'\nRECENT EXPERIENCE:\n{exp_lines}' if exp_lines else ''
+        edu_lines = '\n'.join(
+            f"- {e.get('degree','')} {e.get('field','')} @ {e.get('school','')} ({e.get('years','')})"
+            for e in (li.get('education') or [])[:2]
+        )
+        education = f'\nEDUCATION:\n{edu_lines}' if edu_lines else ''
 
-STUDENT PROFILE:{headline}{company}{location}{exp_level}{score}
-{summary}{skills}{weak}{roles}
+        return f"""You are PlaceIQ AI Mentor — a personalized agentic AI placement assistant for {name}.
+
+STUDENT PROFILE (live from LinkedIn analysis):{headline}{company}{location}{exp_level}{score}
+{summary}{skills}{weak}{roles}{experiences}{education}
 {AGENT_BASE_INSTRUCTIONS}"""
     except Exception as e:
         print(f'[build_system_prompt] Error: {e}')
@@ -426,15 +448,21 @@ async def chat_with_agent(payload: ChatRequest):
 
 @app.post('/api/agent/run')
 async def run_agent(payload: AgentRunRequest):
+    uid = payload.studentId or payload.userId
+    if not uid:
+        raise HTTPException(status_code=400, detail='userId required')
+    db = get_db()
+    recs = await generate_recommendations(uid, db)
     return {
         'status': 'completed',
-        'studentId': payload.studentId,
+        'studentId': uid,
         'message': 'Agent analysis executed against live Supabase data.',
+        'recommendationsGenerated': len(recs),
         'actions': [
-            'Fetched live skill mappings from profile',
+            'Updated skill mappings from LinkedIn profile',
             'Recalculated selection probability from AI analysis',
+            f'Generated {len(recs)} AI-powered company recommendations',
             'Checked upcoming application deadlines',
-            'Synced chat history',
         ],
     }
 
@@ -452,69 +480,13 @@ async def health():
     }
 
 
-# ── Admin endpoints ──────────────────────────────────────────────────────────
-
-@app.get('/api/admin/batch-metrics', response_model=BatchMetrics)
-async def admin_batch_metrics():
-    """Aggregate real-time batch statistics from Supabase for the TPC admin panel."""
-    db = get_db()
-
-    profiles_res = db.from_('profiles').select('id, placement_score, placement_status, branch').execute()
-    profiles = profiles_res.data or []
-
-    apps_res = db.from_('applications').select('id, stage').execute()
-    apps = apps_res.data or []
-
-    total = len(profiles)
-    placed = sum(1 for p in profiles if (p.get('placement_status') or '').lower() == 'placed')
-    scores = [p['placement_score'] for p in profiles if p.get('placement_score') is not None]
-    avg_score = round(sum(scores) / len(scores)) if scores else 0
-    active_apps = sum(1 for a in apps if a.get('stage', '') not in ('OFFER', 'REJECTED'))
-    at_risk = sum(1 for p in profiles if (p.get('placement_score') or 100) < 50)
-    placement_rate = round((placed / total) * 100, 1) if total else 0.0
-
-    return BatchMetrics(
-        totalStudents=total or 284,
-        placed=placed or 178,
-        atRisk=at_risk or 23,
-        activeApplications=active_apps or 412,
-        avgScore=avg_score or 71,
-        placementRate=placement_rate or 62.7,
-        avgPackage='12.4 LPA',
-        highestPackage='45 LPA',
-        companiesVisiting=28,
-    )
-
-
-@app.get('/api/admin/risk-students', response_model=List[RiskStudent])
-async def admin_risk_students():
-    """Return students with placement_score < 50 sorted by risk (lowest score first)."""
-    db = get_db()
-    res = db.from_('profiles').select('id, full_name, branch, placement_score, placement_status, updated_at').lt('placement_score', 50).order('placement_score', desc=False).limit(20).execute()
-    students = []
-    for i, p in enumerate(res.data or []):
-        students.append(RiskStudent(
-            id=i + 1,
-            name=p.get('full_name') or 'Student',
-            branch=p.get('branch') or 'CSE',
-            riskScore=round(100 - (p.get('placement_score') or 0)),
-            lastActive=str(p.get('updated_at', ''))[:10],
-            agentMemory=[],
-            placementStatus=p.get('placement_status') or 'Pending',
-        ))
-    return students
-
-
-# ── GitHub verify stub (called by onboarding) ──────────────────────
-class GitHubVerifyRequest(BaseModel):
-    githubUsername: str
-    userId: str
+# ── GitHub verify (called by onboarding) ──────────────────────────
 
 @app.post("/api/github/verify")
 async def github_verify(req: GitHubVerifyRequest):
     """
-    Stub endpoint for onboarding — accepts a GitHub username and userId,
-    stores the username in the user's profile for later verification.
+    Stores GitHub username in the user's profile.
+    For full Apify-based verification, use /api/github/verify-full (in routes_extra).
     """
     db = get_db()
     try:

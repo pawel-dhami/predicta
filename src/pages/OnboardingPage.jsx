@@ -165,8 +165,8 @@ export default function OnboardingPage() {
             }
             normalizedUrl = normalizedUrl.replace(/^http:\/\//, 'https://').replace(/\/+$/, '');
 
-            // Fire the background function — returns 202 immediately, runs up to 15 min
-            const res = await fetch('/.netlify/functions/linkedin-analyze-background', {
+            // Fire the background analysis — returns 202 immediately, runs async on backend
+            const res = await fetch(`${API_BASE}/api/linkedin/analyze-background`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ linkedinUrl: normalizedUrl, userId }),

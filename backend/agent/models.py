@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 
 class SkillScores(BaseModel):
@@ -35,7 +35,8 @@ class ChatResponse(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
-    studentId: int
+    studentId: Optional[str] = None
+    userId: Optional[str] = None
 
 
 class RiskStudent(BaseModel):
@@ -49,11 +50,13 @@ class RiskStudent(BaseModel):
 
 
 class Application(BaseModel):
+    id: Optional[int] = None
     company: str
     role: str
     stage: str  # APPLIED, OA, INTERVIEW, OFFER, REJECTED
     date: str
     deadline: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class ApplicationCreate(BaseModel):
@@ -62,6 +65,22 @@ class ApplicationCreate(BaseModel):
     role: str
     stage: str = 'APPLIED'
     deadline: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ApplicationUpdate(BaseModel):
+    userId: str
+    id: int
+    company: str
+    role: str
+    stage: str
+    deadline: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ApplicationDelete(BaseModel):
+    userId: str
+    id: int
 
 
 class SkillMapping(BaseModel):
@@ -85,6 +104,19 @@ class Alert(BaseModel):
     time: str
     deadline: Optional[str] = None
     actionText: Optional[str] = None
+
+
+class AlertCreate(BaseModel):
+    userId: str
+    type: str = 'info'
+    text: str
+    actionText: Optional[str] = None
+    deadline: Optional[str] = None
+
+
+class AlertDismiss(BaseModel):
+    userId: str
+    alertId: int
 
 
 class JourneyStage(BaseModel):
@@ -114,3 +146,29 @@ class BatchMetrics(BaseModel):
     avgPackage: str
     highestPackage: str
     companiesVisiting: int
+
+
+# ── LinkedIn / Apify models ──────────────────────────────────────────
+
+class LinkedInAnalyzeRequest(BaseModel):
+    linkedinUrl: str
+    userId: str
+
+
+class ApifyRunRequest(BaseModel):
+    actor: str
+    input: dict
+
+
+class JobsFetchRequest(BaseModel):
+    userId: str
+    forceRefresh: bool = False
+
+
+class GitHubVerifyRequest(BaseModel):
+    githubUsername: str
+    userId: str
+
+
+class ChatHistoryDelete(BaseModel):
+    userId: str
