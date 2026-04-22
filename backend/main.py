@@ -1,13 +1,15 @@
 """
 PlaceIQ API — Consolidated FastAPI backend
 All data is live from Supabase. AI chat powered by Groq Llama 3.1.
-All endpoints from api.mjs + linkedin-analyze-background.mjs are now here.
 """
+# load_dotenv FIRST so all os.getenv() calls in imported modules see the env vars
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import json
 from typing import List, Optional, Any
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
@@ -24,11 +26,8 @@ from services import (
 )
 from routes_extra import router as extra_router
 
-load_dotenv()
-
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://oqghzmvjmdrpyktuxahj.supabase.co')
 SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY', '')
-GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 GROQ_MODEL = 'llama-3.1-8b-instant'
 
@@ -126,32 +125,7 @@ STUDENT PROFILE (live from LinkedIn analysis):{headline}{company}{location}{exp_
         return fallback
 
 
-async def call_groq(messages: list, temperature: float = 0.7, max_tokens: int = 512) -> str:
-    if not GROQ_API_KEY:
-        return None
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            GROQ_ENDPOINT,
-            headers={'Authorization': f'Bearer {GROQ_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': GROQ_MODEL, 'messages': messages, 'temperature': temperature, 'max_tokens': max_tokens},
-            timeout=30.0,
-        )
-        res.raise_for_status()
-        data = res.json()
-        return data['choices'][0]['message']['content']
-
-
-def chat_fallback(message: str) -> str:
-    msg = message.lower()
-    if 'apply' in msg or 'company' in msg:
-        return 'Based on your profile, focus on companies that match your top skills. Check the Skills tab for your current match rates.'
-    if 'resume' in msg or 'review' in msg:
-        return 'Highlight quantifiable achievements. Add metrics to projects and ensure your Skills section aligns with your verified GitHub languages.'
-    if 'mock' in msg or 'interview' in msg:
-        return 'Practice DSA daily and review system design fundamentals. Schedule a mock interview a week before deadlines.'
-    if 'today' in msg or 'plan' in msg:
-        return "Today: 1) Review open deadlines 2) Complete skill assessments 3) Apply to at least one matched company."
-    return 'Your biggest opportunity is closing your weakest skill gap — it will have the highest impact across multiple companies. Want a study plan?'
+# call_groq and chat_fallback are imported from services.py — do not redefine here
 
 
 # ═══════════════════════════════════════════════════════════════════

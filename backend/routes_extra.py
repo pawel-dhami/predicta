@@ -25,14 +25,13 @@ from services import (
 
 router = APIRouter()
 
-SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://oqghzmvjmdrpyktuxahj.supabase.co')
-SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY', '')
-
 
 def get_db() -> Client:
-    if not SUPABASE_SERVICE_KEY:
+    supabase_url = os.getenv('SUPABASE_URL', 'https://oqghzmvjmdrpyktuxahj.supabase.co')
+    supabase_key = os.getenv('SUPABASE_SERVICE_KEY', '')
+    if not supabase_key:
         raise HTTPException(status_code=500, detail='SUPABASE_SERVICE_KEY not configured')
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return create_client(supabase_url, supabase_key)
 
 
 # ── Chat History ─────────────────────────────────────────────────────
